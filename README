@@ -1,0 +1,118 @@
+                                 CArray
+
+         A perl5 module for space-efficient typed external C Arrays
+           Alpha - Interface might change, not fully tested yet
+
+                                 Reini Urban
+                               rurban@x-ray.at
+
+INTRODUCTION
+    Several XS classes and methods to deal with typed, space-efficient
+    C arrays are provided.
+    For the three basic C-types array of INT, DOUBLE and STRING and some
+    sequential aggregate types int[2][], int[3][], int[4][], double[2][],
+    double[3][] hand-optimized, fast XS versions are provided.
+
+    This roughly reflects to:
+
+        CArray
+            CIntArray               int[]
+                CInt2Array          int[][2]
+                CInt3Array          int[][3]
+                CInt4Array          int[][4]
+            CDoubleArray            double[]
+                CDouble2Array       double[][2]
+                CDouble3Array       double[][3]
+            CStringArray            *char[]
+
+    External C arrays limit communication overhead with large simple
+    data structures, where size or time constraints become serious,
+    optionally manipulated by external XS modules. Such as various
+    computional geometry modules dealing with 10.000 - 200.000
+    double[3]. Modification is done in-place and preferably in bulk.
+
+    It might also be easier to write XSUBs by converting the data to
+    CArray's before, pass this pointer to the C func, and handle the
+    results in Perl then instead of writing wrappers just for C arrays.
+
+    Not all perl array methods are provided since perl tie doesn't support the
+    full range yet (i.e. no push, pop, shift, unshift, ...). But there are
+    efficient methods for grow, init, copy, delete, C++ style slice,
+    indirect sort, destructive reverse and conversions between the raw and
+    supported sequential types. Displaced arrays (mappings with arbitary
+    offsets) and more attributes (fill-pointer, read-only, gslice, ...) are
+    not yet supported.
+
+    See the file Changes for user-visible changes.
+    See CArray.pm for usage.
+    See Geometry::Points, Geometry::Delaunay for samples.
+
+    Copyright (c) 1999 Reini Urban.
+    This module is free software; you can redistribute it and/or
+    modify it under the same terms as Perl itself.
+
+INSTALLATION
+    <http://xarch.tu-graz.ac.at/home/rurban/software/perl/> or
+    <http://www.perl.com//CPAN/authors/id/RURBAN/>
+
+    No prerequisites needed, besides a C compiler.
+
+    CArray installs as a standard Perl module,
+
+      perl Makefile.pl
+      make test clean install  (resp. nmake, dmake)
+
+    Tested Platforms:
+      CArray was developed under Win32 - MSVC6 - perl5.00558 w/wo
+      threads/debugging and additionally tested with cygwin - gcc 2.95.
+      Please report other platforms to the author. I see no difficulty
+      for gcc supported platforms, no special platform-specific headers or
+      libraries are used.
+
+SEE ALSO
+    perlxs(1), the "tie" entry in the perlfunc manpage,
+    Geometry::Points, C::Dynalib::Poke, Tie::MmapArray.
+
+WARNING
+    These classes may be easily abused and may lead to system
+    crashes or worse.
+    Bad malloc'ed perls or systems might also lead to destruction.
+    (such as perl5.00558 on Win32 with PERL_MALLOC)
+
+    The author makes NO WARRANTY, implied or otherwise, about the
+    suitability of this software for safety or security purposes.
+
+    The author shall not in any case be liable for special,
+    incidental, consequential, indirect or other similar damages
+    arising from the use of this software.
+
+    Your mileage will vary. If in any doubt DO NOT USE IT. You've
+    been warned.
+
+FUTURE, BUGS
+    The next version 0.12 will go into the Tie:: namespace, renamed to 
+    Tie::CArray
+    0.12 will also support arbitrary perl pack-style structures 
+    (hashes and arrays) and change the new arguments:
+      new new and tie syntax: 2nd arg for template, 3rd for init-values
+   
+    There are certainly some bugs. Not fully tested yet. Tests for copy,
+    grow, delete, tie are pending. Also some more conversion tests,
+    esp. with double and degenerate (grow, cut) cases.
+
+    1   realloc() in string_set() with DEBUGGING perl fails sometimes.
+
+    2   An implicit DESTROY invocation sometimes asserts a DEBUGGING
+        perl, regardless if PERL_MALLOC or the WinNT msvcrt.dll
+        malloc is used. (5.00502 - 5.00558) Esp. on perl shutdown,
+        when freeing the extra objects at the second GC.
+
+        This became much better in 0.08 than in previous versions.
+
+   This is alpha:
+     Interface syntax for arbitrary structures by pack-style templates might
+     change. Method names and arguments may change.
+   Not fully tested yet!
+
+Last Changed
+    2000/01/02

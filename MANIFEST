@@ -1,10 +1,11 @@
-CArray-0.10.readme
+CArray.def
 CArray.pm
 CArray.xs
 Changes
 INSTALL
 MANIFEST
 Makefile.PL
+README
 t/00intarr.t
 t/01dblarr.t
 t/02strarr.t

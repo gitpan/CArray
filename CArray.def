@@ -1,0 +1,4 @@
+LIBRARY "CArray"
+EXPORTS
+  boot_CArray
+  _boot_CArray = boot_CArray

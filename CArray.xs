@@ -1,11 +1,5 @@
-/*
- * Filename : CArray.xs
- *
- * Author   : Reini Urban
- * Date     : 4th December 1999 18:26
- * Version  : 0.10
- *
- */
+#define RCS_STRING "$Id: CArray.xs 0.11 2000/01/02 02:29:04 rurban Exp $"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -17,10 +11,16 @@ extern "C" {
 #include <string.h>
 #include <float.h>
 
-// #define MYDEBUG_FREE
+/* #define MYDEBUG_FREE */
 
 #ifdef __cplusplus
 }
+#endif
+
+/* for linux Dynaloader */
+#ifndef max
+#define max(aaa,bbb) ((aaa) < (bbb) ? (bbb) : (aaa))
+#define min(aaa,bbb) ((aaa) < (bbb) ? (aaa) : (bbb))
 #endif
 
 #ifdef DEBUGGING
@@ -29,74 +29,73 @@ extern "C" {
 #define DBG_PRINTF(X)
 #endif
 
-// the base and the specialized classes for type checks on args
-// CIntArray is derived from CArray, you just cannot do pointer
-// arithmetic with void *CArray->ptr.
-struct CArray
+/* the base and the specialized classes for type checks on args */
+/* CIntArray is derived from CArray, you just cannot do pointer
+   arithmetic with void *CArray->ptr. */
+typedef struct CArray
 {   int len;
     void * ptr;
     int freelen;
-};
-struct CIntArray
+} CARRAY_T;
+typedef struct CIntArray
 {   int len;
     int * ptr;
     int freelen;
-};
-struct CDoubleArray
+} CINTARRAY_T;
+typedef struct CDoubleArray
 {   int len;
     double * ptr;
     int freelen;
-};
-struct CStringArray
+} CDOUBLEARRAY_T;
+typedef struct CStringArray
 {   int len;
     char ** ptr;
     int freelen;
-};
-                                        // Geometric interpretation:
-typedef int    int2[2];                 // edge pairs
-typedef int    int3[3];                 // triangle indices
-typedef int    int4[4];                 // tetras or quads
-typedef double double2[2];              // point2d
-typedef double double3[3];              // point3d
+} CSTRINGARRAY_T;
+                                        /* Geometric interpretation: */
+typedef int    int2[2];                 /* edge pairs                */
+typedef int    int3[3];                 /* triangle indices          */
+typedef int    int4[4];                 /* tetras or quads           */
+typedef double double2[2];              /* point2d                   */
+typedef double double3[3];              /* point3d                   */
 
-
-// we need some memory optimization values here
+/* we need some memory optimization values here */
 #define MAXITEMSIZE max(sizeof(double3),sizeof(int4))
-//#define MAXSTRING 2048                // maximum reversable stringsize
-#define PAGEBITS  11                    // we can also use 10 or 12
-#define PAGESIZE  (1 << PAGEBITS)       // 2048 byte is the size of a fresh carray
+/* #define MAXSTRING 2048  */           /* maximum reversable stringsize */
+#define PAGEBITS  11                    /* we can also use 10 or 12      */
+#define PAGESIZE  (1 << PAGEBITS)       /* 2048 byte is the size of a fresh carray */
 
-char *g_classname;                      // global classname for a typemap trick
-                                        // to return the correct derived class
+char *g_classname;                      /* global classname for a typemap trick    */
+                                        /* to return the correct derived class     */
 
-// allocate a new carray, len must be set explicitly
+/* allocate a new carray, len must be set explicitly */
 #define NEW_CARRAY(VAR,STRUCT_TYPE,LEN,ITEMSIZE) \
-    VAR  = (struct STRUCT_TYPE *) safemalloc(sizeof(struct STRUCT_TYPE)); \
+    VAR  = (STRUCT_TYPE *) safemalloc(sizeof(STRUCT_TYPE)); \
     VAR->freelen = freesize (LEN,ITEMSIZE); \
     VAR->ptr = safemalloc((LEN + VAR->freelen) * ITEMSIZE); \
     VAR->len = LEN;
 
-// VAR must exist
+/* VAR must exist */
 #define MAYBE_GROW_CARRAY(VAR,STRUCT_TYPE,LEN,ITEMSIZE) \
   if (VAR->len < LEN) \
-    VAR = (struct STRUCT_TYPE *)grow((struct CArray *)VAR,LEN - VAR->len,ITEMSIZE);
+    VAR = (STRUCT_TYPE *)grow((CARRAY_T *)VAR,LEN - VAR->len,ITEMSIZE);
 
-// this is the to-tune part:
-// the overall size should fit into a page or other malloc chunks.
-// leave room for "some" more items, but align it to the page size.
-// should small arrays (<100) be aligned at 2048 or smaller bounds?
-// 10 => 2048-10, 2000 => 2048-2000, 200.000 => 2048
-// len is the actual length of the array, size the itemsize in bytes
+/* this is the to-tune part:
+ * the overall size should fit into a page or other malloc chunks.
+ * leave room for "some" more items, but align it to the page size.
+ * should small arrays (<100) be aligned at 2048 or smaller bounds?
+ * 10 => 2048-10, 2000 => 2048-2000, 200.000 => 2048
+ * len is the actual length of the array, size the itemsize in bytes */
 int freesize (int len, int size)
 {
     len *= size;
     return max(PAGESIZE-len, len - ((len >> PAGEBITS) << PAGEBITS)) / size;
 }
 
-struct CArray *grow (struct CArray *carray, int n, int itemsize)
+CARRAY_T *grow (CARRAY_T *carray, int n, int itemsize)
 {
     int len = carray->len;
-    // make room for n new elements
+    /* make room for n new elements */
     if (n > carray->freelen) {
         carray->freelen = freesize (len + n, itemsize);
         carray->ptr = (void *) saferealloc (carray->ptr, len + carray->freelen);
@@ -140,14 +139,14 @@ char *CDbl3NAME  = "CDouble3Array";
 
 char* ErrMsg_index = "index out of range";
 char* ErrMsg_itemsize = "no itemsize for CArray element defined";
-//char* ErrMsg_type     = "arg is not of type %s";
+/*char* ErrMsg_type     = "arg is not of type %s"; */
 
 #define CHECK_DERIVED_FROM(i,NAME) \
-  if (!sv_derived_from(ST(i),NAME)) \
+  if (!SvROK(ST(i)) || !sv_derived_from(ST(i),NAME)) \
     croak("arg is not of type %s",NAME)
 
-// size per item ín bytes, get it dynamically from READONLY vars
-// initalized at BOOT. This way we can add derived classes in perl easily.
+/* size per item ín bytes, get it dynamically from READONLY vars
+ * initalized at BOOT. This way we can add derived classes in perl easily. */
 int mysv_itemsize (SV *arg)
 {
   char varname[80];
@@ -170,8 +169,8 @@ sizeerr:
   return 0;
 }
 
-// to overcome ->new and ::new problems
-// the first regular new arg must be an IV (size here)
+/* to overcome ->new and ::new problems
+ * the first regular new arg must be an IV (size here) */
 char * mysv_classname (SV *this)
 {
     if ( SvROK(this)  ) {
@@ -185,7 +184,7 @@ char * mysv_classname (SV *this)
     return NULL;
 }
 
-// create a sv var, with some flag bits set
+/* create a sv var, with some flag bits set */
 int mysv_ivcreate ( int value, char *name, int flag)
 {
     SV* sv = perl_get_sv( name, TRUE );
@@ -194,30 +193,150 @@ int mysv_ivcreate ( int value, char *name, int flag)
     return 1;
 }
 
+int myarray_init (char *classname, CARRAY_T *carray, AV *av)
+{
+    int avlen, i, len;
+    AV *av1;
+
+    len = carray->len;
+    avlen = av_len(av);
+    /* initializing section: */
+    if (strEQ(classname,CIntNAME)) {
+        int* array = carray->ptr;
+        for (i=0; i <= min(avlen,len-1); i++) {
+            array[i] = SvIV(AvARRAY(av)[i]);
+        }
+        return 1;
+    }
+    if (strEQ(classname,CDblNAME)) {
+        double* array = carray->ptr;
+        for (i=0; i <= min(avlen,len-1); i++) {
+            array[i] = SvNV(AvARRAY(av)[i]);
+        }
+        return 1;
+    }
+    if (strEQ(classname,CStrNAME)) {
+        char *s;
+        char** array = carray->ptr;
+        for (i=0; i <= min(avlen,len-1); i++) {
+            if ( SvPOK(AvARRAY(av)[i]) ) {
+                s = SvPVX(AvARRAY(av)[i]);
+                array[i] = safemalloc(strlen(s)+1);
+                strcpy(array[i],s);
+            }
+        }
+        return 1;
+    }
+    if (strEQ(classname,CInt2NAME)) {
+        int2* array = carray->ptr;
+        for (i=0; i <= min(avlen,len-1); i++) {
+	    /* dive into [[0,1][2,3]] */
+            if (!SvROK(av)) return 0;
+            av1 = (AV*) SvRV(AvARRAY(av)[i]);
+            if (av_len(av1) >= 1) {
+              array[i][0] = SvIV(AvARRAY(av1)[0]);
+              array[i][1] = SvIV(AvARRAY(av1)[1]);
+            }
+        }
+        return 1;
+    }
+    if (strEQ(classname,CInt3NAME)) {
+        int3* array = carray->ptr;
+        for (i=0; i <= min(avlen,len-1); i++) {
+	    /* dive into [[0,1,2][3,4,5]] */
+            if (!SvROK(av)) return 0;
+            av1 = (AV*)SvRV(AvARRAY(av)[i]);
+            if (av_len(av1) >= 2) {
+              array[i][0] = SvIV(AvARRAY(av1)[0]);
+              array[i][1] = SvIV(AvARRAY(av1)[1]);
+              array[i][2] = SvIV(AvARRAY(av1)[2]);
+            }
+        }
+        return 1;
+    }
+    if (strEQ(classname,CInt4NAME)) {
+        int4* array = carray->ptr;
+        for (i=0; i <= min(avlen,len-1); i++) {
+            if (!SvROK(av)) return 0;
+            av1 = (AV*)SvRV(AvARRAY(av)[i]);
+            if (av_len(av1) >= 3) {
+              array[i][0] = SvIV(AvARRAY(av1)[0]);
+              array[i][1] = SvIV(AvARRAY(av1)[1]);
+              array[i][2] = SvIV(AvARRAY(av1)[2]);
+              array[i][3] = SvIV(AvARRAY(av1)[3]);
+            }
+        }
+        return 1;
+    }
+    if (strEQ(classname,CDbl2NAME)) {
+        double2* array = carray->ptr;
+        for (i=0; i <= min(avlen,len-1); i++) {
+            if (!SvROK(av)) return 0;
+            av1 = (AV*)SvRV(AvARRAY(av)[i]);
+            if (av_len(av1) >= 1) {
+              array[i][0] = SvNV(AvARRAY(av1)[0]);
+              array[i][1] = SvNV(AvARRAY(av1)[1]);
+            }
+        }
+        return 1;
+    }
+    if (strEQ(classname,CDbl3NAME)) {
+        double3* array = carray->ptr;
+        for (i=0; i <= min(avlen,len-1); i++) {
+            if (!SvROK(av)) return 0;
+            av1 = (AV*)SvRV(AvARRAY(av)[i]);
+            if (av_len(av1) >= 2) {
+              array[i][0] = SvNV(AvARRAY(av1)[0]);
+              array[i][1] = SvNV(AvARRAY(av1)[1]);
+              array[i][2] = SvNV(AvARRAY(av1)[2]);
+            }
+        }
+        return 1;
+    }
+    return 0;
+}
+
+
 MODULE = CArray     PACKAGE = CArray   PREFIX = carray_
 PROTOTYPES: DISABLE
 
+char *
+carray_XS_rcs_string()
+CODE:
+ RETVAL = RCS_STRING;
+OUTPUT:
+ RETVAL
+
+char *
+carray_XS_compile_date()
+CODE:
+ RETVAL = __DATE__ " " __TIME__;
+OUTPUT:
+ RETVAL
+
 void
 carray_DESTROY (carray)
-  struct CArray *carray
+  CARRAY_T *carray
 PREINIT:
     SV *this = ST(0);
     char *old;
 CODE:
 #ifdef MYDEBUG_FREE
   DBG_PRINTF(("XSDbg: free (%p,->%p)\n",carray, carray->ptr));
-//  DBG_PRINTF(("    => (refSV: %d, RV: %p, IVRV: %p, refRV: %d)\n",
-//    SvREFCNT(ST(0)), SvRV(ST(0)), SvIV(SvRV(ST(0))), SvREFCNT(SvRV(ST(0))) ));
+/*  DBG_PRINTF(("    => (refSV: %d, RV: %p, IVRV: %p, refRV: %d)\n",
+      SvREFCNT(ST(0)), SvRV(ST(0)), SvIV(SvRV(ST(0))), SvREFCNT(SvRV(ST(0))) ));
+ */
 #endif
   old = (char *) carray;
   if (carray) {
     if (carray->ptr) safefree ((char *) carray->ptr);
-    // safefree ((char *) carray);
+    /* safefree ((char *) carray); */
   }
-  //if (old == (char *) carray)   // too lazy. hmm, this will be reused.
-  //  carray->ptr=0;
-  // SvROK_off (this);
-  // SvREFCNT (this)--;
+/* if (old == (char *) carray)
+     carray->ptr=0;
+   SvROK_off (this);
+   SvREFCNT (this)--;
+*/
 #ifdef MYDEBUG_FREE
   DBG_PRINTF((" unref (refSV: %d, RV: %p, IVRV: %p, refRV: %d)\n",
     SvREFCNT(this), SvRV(this), SvIV(SvRV(this)), SvREFCNT(SvRV(this)) ));
@@ -225,32 +344,32 @@ CODE:
 
 int
 carray_len (carray)
-  struct CArray * carray
+  CARRAY_T * carray
 CODE:
-  // sequential classes must divide this
+  /* sequential classes must divide this */
   RETVAL = carray->len;
 OUTPUT:
   RETVAL
 
 int
 carray_free (carray)
-  struct CArray * carray
+  CARRAY_T * carray
 CODE:
-  // sequential classes must divide this
+  /* sequential classes must divide this */
   RETVAL = carray->freelen;
 OUTPUT:
   RETVAL
 
 void
 carray_grow (carray, n)
-    struct CArray * carray
+    CARRAY_T * carray
     int n
 CODE:
     grow (carray, n, mysv_itemsize( ST(0) ));
 
 void
 carray_delete (carray, index)
-    struct CArray * carray
+    CARRAY_T * carray
     int index
 PREINIT:
     char *array;
@@ -258,7 +377,7 @@ PREINIT:
 CODE:
     if ((index < 0) || (index >= carray->len))
       croak (ErrMsg_index);
-    // deletes one item at index, there's no shrink
+    /* deletes one item at index, there's no shrink */
     carray->freelen++;
     carray->len--;
     if (index < carray->len-1) {
@@ -267,18 +386,17 @@ CODE:
         memcpy (array, array + itemsize, itemsize*(carray->len - index));
     }
 
-struct CArray *
+CARRAY_T *
 carray_copy (carray)
-  struct CArray * carray
+  CARRAY_T * carray
 PREINIT:
     SV * this = ST(0);
     int itemsize, len;
-    struct CArray * ncarray;
+    CARRAY_T * ncarray;
 CODE:
     itemsize = mysv_itemsize( this );
     len = carray->len;
-    //
-    NEW_CARRAY(ncarray,CArray,len,itemsize);
+    NEW_CARRAY(ncarray,CARRAY_T,len,itemsize);
     memcpy (ncarray->ptr, carray->ptr, itemsize * len);
     RETVAL = carray;
 OUTPUT:
@@ -286,20 +404,20 @@ OUTPUT:
 
 void
 carray_nreverse (carray)
-  struct CArray * carray
+  CARRAY_T * carray
 PREINIT:
-  char *up, *down;                      // pointers incrementable by 1
-  char tmp[MAXITEMSIZE];                // 24=maximal itemsize
+  char *up, *down;                      /* pointers incrementable by 1 */
+  char tmp[MAXITEMSIZE];                /* 24=maximal itemsize */
   int len, itemsize;
 CODE:
-  // generic reverse in place, returns nothing
+  /* generic reverse in place, returns nothing */
   len = carray->len;
   if (!len)  XSRETURN_NO;
-  //if (!carray->ptr) XSRETURN_NO;
-  // get the itemsize to swap: there's a XSUB cv ->itemsize
+/* if (!carray->ptr) XSRETURN_NO; */
+  /* get the itemsize to swap: there's a XSUB cv ->itemsize */
   itemsize = mysv_itemsize(ST(0));
   if (!itemsize)  croak (ErrMsg_itemsize);
-  //
+  /* */
   down = (char *)carray->ptr + ((len-1)*itemsize);
   up   = (char *)carray->ptr;
   while ( down > up )
@@ -311,12 +429,21 @@ CODE:
     down -= itemsize;
   }
 
+void
+carray_init (carray, av)
+    CARRAY_T *carray;
+    AV * av;
+CODE:
+    if (!av) XSRETURN_EMPTY;
+    myarray_init(g_classname, carray, av);
+
+
 MODULE = CArray     PACKAGE = CIntArray PREFIX = int_
 PROTOTYPES: DISABLE
 
 int
 int_itemsize (carray)
-  struct CIntArray * carray
+  CINTARRAY_T * carray
 CODE:
   RETVAL = sizeof(int);
 OUTPUT:
@@ -329,14 +456,14 @@ PPCODE:
   SV * this = ST(0);
   int  len;
   AV * av;
-  struct CIntArray *carray;
+  CINTARRAY_T *carray;
   int *array;
   int i, avlen;
-  //
+  /* */
   if (items < 1 || items > 3)
     croak("Usage: new CIntArray(len, [AVPtr])");
   {
-    // need to check for ->new invocation, we'll have 3 args then
+    /* need to check for ->new invocation, we'll have 3 args then */
     g_classname = mysv_classname(this);
     if ( g_classname  ) {
         len = (int)SvIV(ST(1));
@@ -346,22 +473,17 @@ PPCODE:
         len = (int)SvIV(ST(0));
         av   = (items == 2) ? av = (AV*)SvRV(ST(1)) : NULL;
     }
-    // make room: freesize leaves room for certain more items
-    NEW_CARRAY(carray,CIntArray,len,sizeof(int));
+    /* make room: freesize leaves room for certain more items */
+    NEW_CARRAY(carray,CINTARRAY_T,len,sizeof(int));
     if (av) {
-      // initializing section:
-      // for derived classes we'll have a problem here!
-      // we could either check the classname for ints,
-      // or provide seperate initializers (in perl)
-      if (!strEQ(g_classname,CIntNAME)) {
+      /* for derived classes we'll have a problem here!
+      * we could either check the classname for ints,
+      * or provide seperate initializers (in perl) */
+/*    if (!strEQ(g_classname,CIntNAME)) {
         warn("can only initialize %s",CIntNAME);
-      } else {
-        avlen = av_len(av);
-        array = carray->ptr;
-        for (i=0; i <= min(avlen,len-1); i++) {
-            array[i] = SvIV(AvARRAY(av)[i]);
-        }
-      }
+      } else
+*/
+        myarray_init(g_classname, (CARRAY_T *)carray, av);
     }
     EXTEND(sp, 1);
     ST(0) = sv_newmortal();
@@ -371,67 +493,47 @@ PPCODE:
 
 int
 int_get(carray, index)
-  struct CIntArray * carray
+  CINTARRAY_T * carray
   int   index
 CODE:
   if ((index < 0) || (index >= carray->len))
     croak (ErrMsg_index);
-//  DBG_PRINTF(("XSDbg: get (%p,%d)",array,index));
+/*  DBG_PRINTF(("XSDbg: get (%p,%d)",array,index)); */
   RETVAL = carray->ptr[index];
-//  DBG_PRINTF((" => %d\n",array[index]));
+/*  DBG_PRINTF((" => %d\n",array[index])); */
 OUTPUT:
   RETVAL
 
 void
 int_set(carray, index, value)
-  struct CIntArray * carray
+  CINTARRAY_T * carray
   int index
   int value
 CODE:
+{
   if ((index < 0) || (index >= carray->len))
     croak (ErrMsg_index);
-//  DBG_PRINTF(("XSDbg: set (%p,%d,%d)\n",array,index,value));
+/*  DBG_PRINTF(("XSDbg: set (%p,%d,%d)\n",array,index,value)); */
   carray->ptr[index] = value;
-// slightly faster but the return value on the stack messes up the array
-//struct CIntArray *
-//int_nreverse (carray)
-//  struct CIntArray * carray
-//PREINIT:
-//  int *up, *down, tmp, len;
-//CODE:
-//  len = carray->len;
-//  if (!len)  XSRETURN_EMPTY;
-//  if (!carray->ptr) XSRETURN_EMPTY;
-//  // specialized reverse in place
-//  down = &carray->ptr[len-1];
-//  up   = &carray->ptr[0];
-//  while ( down > up )
-//  {
-//    tmp = *up;
-//    *up++ = *down;
-//    *down-- = tmp;
-//  }
-//  RETVAL = carray;
-//OUTPUT:
-//  RETVAL
+}
 
 void
 int_ToInt2 (x, y, dst=0)
-  struct CIntArray * x
-  struct CIntArray * y
-  struct CIntArray * dst = (items == 3) ? dst = (struct CIntArray *)SvRV(ST(2)) : NULL;
+  CINTARRAY_T * x
+  CINTARRAY_T * y
+  CINTARRAY_T * dst = (items == 3) ? dst = (CINTARRAY_T *)SvRV(ST(2)) : NULL;
 PREINIT:
   int i, len;
   int2 *dstp;
 CODE:
-  // convert two parallel int *x,*y to one int[2]
-  // if dst, which must be preallocated, copy it to this location
+  /* convert two parallel int *x,*y to one int[2] */
+  /* if dst, which must be preallocated, copy it to this location */
   len = x->len;
   if (!dst) {
-    NEW_CARRAY(dst,CIntArray,len,sizeof(int2));
+    NEW_CARRAY(dst,CINTARRAY_T,len,sizeof(int2));
   } else {
     CHECK_DERIVED_FROM(2,CIntNAME);
-    MAYBE_GROW_CARRAY(dst,CIntArray,len,sizeof(int2));
+    MAYBE_GROW_CARRAY(dst,CINTARRAY_T,len,sizeof(int2));
   }
   dstp = (int2 *)dst->ptr;
   if (min(x->len,y->len) == len)
@@ -446,25 +548,25 @@ CODE:
     }
   dst->len = len * 2;
   ST(0) = sv_newmortal();
-  // blessing makes problems: it is returned as "CIntArray" object.
+  /* blessing makes problems: it is returned as "CIntArray" object. */
   sv_setref_pv(ST(0), CInt2NAME, (void*)dst);
 
-struct CIntArray *
+CINTARRAY_T *
 int_ToInt3 (x, y, z, dst=0)
-  struct CIntArray * x
-  struct CIntArray * y
-  struct CIntArray * z
-  struct CIntArray *dst = (items > 3) ? dst = (struct CIntArray *)SvRV(ST(3)) : NULL;
+  CINTARRAY_T * x
+  CINTARRAY_T * y
+  CINTARRAY_T * z
+  CINTARRAY_T *dst = (items > 3) ? dst = (CINTARRAY_T *)SvRV(ST(3)) : NULL;
 PREINIT:
   int i, len;
   int3 *dstp;
 CODE:
   len = x->len;
   if (!dst) {
-    NEW_CARRAY(dst,CIntArray,len,sizeof(int3));
+    NEW_CARRAY(dst,CINTARRAY_T,len,sizeof(int3));
   } else {
     CHECK_DERIVED_FROM(3,CIntNAME);
-    MAYBE_GROW_CARRAY(dst,CIntArray,len,sizeof(int3));
+    MAYBE_GROW_CARRAY(dst,CINTARRAY_T,len,sizeof(int3));
   }
   dstp = (int3 *) dst->ptr;
   if (min(min(x->len,y->len),z->len) == len)
@@ -485,23 +587,23 @@ CODE:
 OUTPUT:
   RETVAL
 
-struct CIntArray *
+CINTARRAY_T *
 int_ToInt4 (x, y, z, w, dst=0)
-  struct CIntArray * x
-  struct CIntArray * y
-  struct CIntArray * z
-  struct CIntArray * w
-  struct CIntArray * dst = (items > 4) ? dst = (struct CIntArray *)SvRV(ST(4)) : NULL;
+  CINTARRAY_T * x
+  CINTARRAY_T * y
+  CINTARRAY_T * z
+  CINTARRAY_T * w
+  CINTARRAY_T * dst = (items > 4) ? dst = (CINTARRAY_T *)SvRV(ST(4)) : NULL;
 PREINIT:
   int i, len;
   int4 *dstp;
 CODE:
   len = x->len;
   if (!dst) {
-    NEW_CARRAY(dst,CIntArray,len,sizeof(int4));
+    NEW_CARRAY(dst,CINTARRAY_T,len,sizeof(int4));
   } else {
     CHECK_DERIVED_FROM(4,CIntNAME);
-    MAYBE_GROW_CARRAY(dst,CIntArray,len,sizeof(int4));
+    MAYBE_GROW_CARRAY(dst,CINTARRAY_T,len,sizeof(int4));
   }
   dstp = (int4 *) dst->ptr;
   if ( min (min (x->len,y->len), min (z->len,w->len)) == len)
@@ -524,12 +626,28 @@ CODE:
 OUTPUT:
   RETVAL
 
+AV *
+int_list(carray)
+  CINTARRAY_T * carray
+PREINIT:
+    int i, len, *array;
+CODE:
+    RETVAL = newAV();
+    len = carray->len;
+    array = carray->ptr;
+    for (i=0; i<len; i++ ) {
+        av_push(RETVAL, sv_2mortal( newSViv( array[i] )));
+    }
+OUTPUT:
+  RETVAL
+
+
 MODULE = CArray     PACKAGE = CInt2Array PREFIX = int2_
 PROTOTYPES: DISABLE
 
 int
 int2_itemsize (carray)
-  struct CIntArray * carray
+  CINTARRAY_T * carray
 CODE:
   RETVAL = sizeof(int2);
 OUTPUT:
@@ -537,7 +655,7 @@ OUTPUT:
 
 void
 int2_get (carray, index)
-    struct CIntArray *carray
+    CINTARRAY_T *carray
     int index
 PREINIT:
     int2 *array;
@@ -549,22 +667,28 @@ CODE:
 #ifdef WANTARRAY
   if (Perl_dowantarray()) {
 #endif
+#if (WANTARRAY || ASARRAY)
     XST_mIV(0,array[index][0]);
     XST_mIV(1,array[index][1]);
     XSRETURN(2);
+#endif
 #ifdef WANTARRAY
   } else {
+#endif
+#if (WANTARRAY || !ASARRAY)
     av = newAV();
     av_push(av, sv_2mortal( newSViv( array[index][0] )));
     av_push(av, sv_2mortal( newSViv( array[index][1] )));
     ST(0) = sv_2mortal(newRV((SV*) av));
     XSRETURN(1);
+#endif
+#ifdef WANTARRAY
   }
 #endif
 
 void
 int2_set(carray, index, value)
-  struct CIntArray * carray
+  CINTARRAY_T * carray
   int index
   AV * value
 PREINIT:
@@ -581,35 +705,35 @@ CODE:
 
 AV *
 int2_ToPar (carray, x=0, y=0)
-  struct CIntArray * carray
-  struct CIntArray * x  = (items > 1)  ? x = (struct CIntArray *) SvRV(ST(1)) : NULL;
-  struct CIntArray * y  = (items > 2)  ? y = (struct CIntArray *) SvRV(ST(2)) : NULL;
+  CINTARRAY_T * carray
+  CINTARRAY_T * x  = (items > 1)  ? x = (CINTARRAY_T *) SvRV(ST(1)) : NULL;
+  CINTARRAY_T * y  = (items > 2)  ? y = (CINTARRAY_T *) SvRV(ST(2)) : NULL;
 PREINIT:
   int i, len;
   int3 *array;
 CODE:
-  // convert one int[3] to parallel ints *x,*y,*z
-  // if dst, which must be preallocated, copy it to this location.
-  // return an arrayref to the three objects
+  /* convert one int[3] to parallel ints *x,*y,*z */
+  /* if dst, which must be preallocated, copy it to this location. */
+  /* return an arrayref to the three objects */
   len = carray->len / 3;
   array = (int3 *) carray->ptr;
   if (!x) {
-    NEW_CARRAY(x,CIntArray,len,sizeof(int));
+    NEW_CARRAY(x,CINTARRAY_T,len,sizeof(int));
   } else {
     CHECK_DERIVED_FROM(1,CIntNAME);
-    MAYBE_GROW_CARRAY(x,CIntArray,len,sizeof(int));
+    MAYBE_GROW_CARRAY(x,CINTARRAY_T,len,sizeof(int));
   }
   if (!y) {
-    NEW_CARRAY(y,CIntArray,len,sizeof(int));
+    NEW_CARRAY(y,CINTARRAY_T,len,sizeof(int));
   } else {
     CHECK_DERIVED_FROM(2,CIntNAME);
-    MAYBE_GROW_CARRAY(y,CIntArray,len,sizeof(int));
+    MAYBE_GROW_CARRAY(y,CINTARRAY_T,len,sizeof(int));
   }
   for (i=0; i < len; i++) {
     x->ptr[i] = array[i][0];
     y->ptr[i] = array[i][1];
   }
-  // if (items < 3) EXTEND(sp,1);// one more
+  /* if (items < 3) EXTEND(sp,1);// one more */
   RETVAL = newAV();
   av_push(RETVAL, sv_setref_pv( sv_newmortal(), CIntNAME, (void*)x));
   av_push(RETVAL, sv_setref_pv( sv_newmortal(), CIntNAME, (void*)y));
@@ -621,7 +745,7 @@ PROTOTYPES: DISABLE
 
 int
 int3_itemsize (carray)
-  struct CIntArray * carray
+  CINTARRAY_T * carray
 CODE:
   RETVAL = sizeof(int3);
 OUTPUT:
@@ -629,7 +753,7 @@ OUTPUT:
 
 void
 int3_get (carray, index)
-  struct CIntArray *carray
+  CINTARRAY_T *carray
   int index
 PREINIT:
   int3 *array;
@@ -641,25 +765,31 @@ CODE:
 #ifdef WANTARRAY
   if (Perl_dowantarray()) {
 #endif
-    EXTEND(sp,1);// one more
+#if (WANTARRAY || ASARRAY)
+    EXTEND(sp,1);
     XST_mIV(0,array[index][0]);
     XST_mIV(1,array[index][1]);
     XST_mIV(2,array[index][2]);
     XSRETURN(3);
+#endif
 #ifdef WANTARRAY
   } else {
+#endif
+#if (WANTARRAY || !ASARRAY)
     av = newAV();
     av_push(av, sv_2mortal( newSViv( array[index][0] )));
     av_push(av, sv_2mortal( newSViv( array[index][1] )));
     av_push(av, sv_2mortal( newSViv( array[index][2] )));
     ST(0) = sv_2mortal(newRV((SV*) av));
     XSRETURN(1);
+#endif
+#ifdef WANTARRAY
   }
 #endif
 
 void
 int3_set(carray, index, value)
-  struct CIntArray * carray
+  CINTARRAY_T * carray
   int index
   AV * value
 PREINIT:
@@ -676,43 +806,43 @@ CODE:
 
 AV *
 int3_ToPar (carray, x=0, y=0, z=0)
-  struct CIntArray * carray
-  struct CIntArray * x  = (items > 1) ? x = (struct CIntArray *) SvRV(ST(1)) : NULL;
-  struct CIntArray * y  = (items > 2) ? y = (struct CIntArray *) SvRV(ST(2)) : NULL;
-  struct CIntArray * z  = (items > 3) ? z = (struct CIntArray *) SvRV(ST(3)) : NULL;
+  CINTARRAY_T * carray
+  CINTARRAY_T * x  = (items > 1) ? x = (CINTARRAY_T *) SvRV(ST(1)) : NULL;
+  CINTARRAY_T * y  = (items > 2) ? y = (CINTARRAY_T *) SvRV(ST(2)) : NULL;
+  CINTARRAY_T * z  = (items > 3) ? z = (CINTARRAY_T *) SvRV(ST(3)) : NULL;
 PREINIT:
   int i, len;
   int3 *array;
 CODE:
-  // convert one int[3] to parallel ints *x,*y,*z
-  // if dst, which must be preallocated, copy it to this location
-  // return an arrayref to the three objects
+  /* convert one int[3] to parallel ints *x,*y,*z */
+  /* if dst, which must be preallocated, copy it to this location */
+  /* return an arrayref to the three objects */
   len = carray->len / 3;
   array = (int3 *) carray->ptr;
   if (!x) {
-    NEW_CARRAY(x,CIntArray,len,sizeof(int));
+    NEW_CARRAY(x,CINTARRAY_T,len,sizeof(int));
   } else {
     CHECK_DERIVED_FROM(1,CIntNAME);
-    MAYBE_GROW_CARRAY(x,CIntArray,len,sizeof(int));
+    MAYBE_GROW_CARRAY(x,CINTARRAY_T,len,sizeof(int));
   }
   if (!y) {
-    NEW_CARRAY(y,CIntArray,len,sizeof(int));
+    NEW_CARRAY(y,CINTARRAY_T,len,sizeof(int));
   } else {
     CHECK_DERIVED_FROM(2,CIntNAME);
-    MAYBE_GROW_CARRAY(y,CIntArray,len,sizeof(int));
+    MAYBE_GROW_CARRAY(y,CINTARRAY_T,len,sizeof(int));
   }
   if (!z) {
-    NEW_CARRAY(z,CIntArray,len,sizeof(int));
+    NEW_CARRAY(z,CINTARRAY_T,len,sizeof(int));
   } else {
     CHECK_DERIVED_FROM(3,CIntNAME);
-    MAYBE_GROW_CARRAY(z,CIntArray,len,sizeof(int));
+    MAYBE_GROW_CARRAY(z,CINTARRAY_T,len,sizeof(int));
   }
   for (i=0; i < len; i++) {
     x->ptr[i] = array[i][0];
     y->ptr[i] = array[i][1];
     z->ptr[i] = array[i][2];
   }
-  // if (items < 3) EXTEND(sp,1);// one more
+  /* if (items < 3) EXTEND(sp,1);// one more */
   RETVAL = newAV();
   av_push(RETVAL, sv_setref_pv(sv_newmortal(), CIntNAME, (void*)x));
   av_push(RETVAL, sv_setref_pv(sv_newmortal(), CIntNAME, (void*)y));
@@ -725,7 +855,7 @@ PROTOTYPES: DISABLE
 
 int
 int4_itemsize (carray)
-  struct CIntArray * carray
+  CINTARRAY_T * carray
 CODE:
   RETVAL = sizeof(int4);
 OUTPUT:
@@ -733,7 +863,7 @@ OUTPUT:
 
 void
 int4_get (carray, index)
-  struct CIntArray *carray
+  CINTARRAY_T *carray
   int index
 PREINIT:
   int4 *array;
@@ -745,14 +875,18 @@ CODE:
 #ifdef WANTARRAY
   if (Perl_dowantarray()) {
 #endif
-    EXTEND(sp,2);// one more
+#if (WANTARRAY || ASARRAY)
+    EXTEND(sp,2);
     XST_mIV(0,array[index][0]);
     XST_mIV(1,array[index][1]);
     XST_mIV(2,array[index][2]);
     XST_mIV(3,array[index][3]);
     XSRETURN(4);
+#endif
 #ifdef WANTARRAY
   } else {
+#endif
+#if (WANTARRAY || !ASARRAY)
     av = newAV();
     av_push(av, sv_2mortal( newSViv( array[index][0] )));
     av_push(av, sv_2mortal( newSViv( array[index][1] )));
@@ -760,12 +894,14 @@ CODE:
     av_push(av, sv_2mortal( newSViv( array[index][3] )));
     ST(0) = sv_2mortal(newRV((SV*) av));
     XSRETURN(1);
+#endif
+#ifdef WANTARRAY
   }
 #endif
 
 void
 int4_set(carray, index, value)
-  struct CIntArray * carray
+  CINTARRAY_T * carray
   int index
   AV * value
 PREINIT:
@@ -782,11 +918,11 @@ CODE:
 
 AV *
 int4_ToPar (carray, x=0, y=0, z=0, w=0)
-  struct CIntArray * carray
-  struct CIntArray * x  = (items > 1) ? x = (struct CIntArray *) SvRV(ST(1)) : NULL;
-  struct CIntArray * y  = (items > 2) ? y = (struct CIntArray *) SvRV(ST(2)) : NULL;
-  struct CIntArray * z  = (items > 3) ? z = (struct CIntArray *) SvRV(ST(3)) : NULL;
-  struct CIntArray * w  = (items > 4) ? w = (struct CIntArray *) SvRV(ST(4)) : NULL;
+  CINTARRAY_T * carray
+  CINTARRAY_T * x  = (items > 1) ? x = (CINTARRAY_T *) SvRV(ST(1)) : NULL;
+  CINTARRAY_T * y  = (items > 2) ? y = (CINTARRAY_T *) SvRV(ST(2)) : NULL;
+  CINTARRAY_T * z  = (items > 3) ? z = (CINTARRAY_T *) SvRV(ST(3)) : NULL;
+  CINTARRAY_T * w  = (items > 4) ? w = (CINTARRAY_T *) SvRV(ST(4)) : NULL;
 PREINIT:
   int i, len;
   int4 *array;
@@ -794,28 +930,28 @@ CODE:
   len = carray->len / 4;
   array = (int4 *) carray->ptr;
   if (!x) {
-    NEW_CARRAY(x,CIntArray,len,sizeof(int));
+    NEW_CARRAY(x,CINTARRAY_T,len,sizeof(int));
   } else {
     CHECK_DERIVED_FROM(1,CIntNAME);
-    MAYBE_GROW_CARRAY(x,CIntArray,len,sizeof(int));
+    MAYBE_GROW_CARRAY(x,CINTARRAY_T,len,sizeof(int));
   }
   if (!y) {
-    NEW_CARRAY(y,CIntArray,len,sizeof(int));
+    NEW_CARRAY(y,CINTARRAY_T,len,sizeof(int));
   } else {
     CHECK_DERIVED_FROM(2,CIntNAME);
-    MAYBE_GROW_CARRAY(y,CIntArray,len,sizeof(int));
+    MAYBE_GROW_CARRAY(y,CINTARRAY_T,len,sizeof(int));
   }
   if (!z) {
-    NEW_CARRAY(z,CIntArray,len,sizeof(int));
+    NEW_CARRAY(z,CINTARRAY_T,len,sizeof(int));
   } else {
     CHECK_DERIVED_FROM(3,CIntNAME);
-    MAYBE_GROW_CARRAY(z,CIntArray,len,sizeof(int));
+    MAYBE_GROW_CARRAY(z,CINTARRAY_T,len,sizeof(int));
   }
   if (!w) {
-    NEW_CARRAY(w,CIntArray,len,sizeof(int));
+    NEW_CARRAY(w,CINTARRAY_T,len,sizeof(int));
   } else {
     CHECK_DERIVED_FROM(4,CIntNAME);
-    MAYBE_GROW_CARRAY(w,CIntArray,len,sizeof(int));
+    MAYBE_GROW_CARRAY(w,CINTARRAY_T,len,sizeof(int));
   }
   for (i=0; i < len; i++) {
     x->ptr[i] = array[i][0];
@@ -836,7 +972,7 @@ PROTOTYPES: DISABLE
 
 int
 double_itemsize (carray)
-  struct CDoubleArray * carray
+  CDOUBLEARRAY_T * carray
 CODE:
   RETVAL = sizeof(double);
 OUTPUT:
@@ -848,14 +984,14 @@ PPCODE:
   SV * this = ST(0);
   int  len;
   AV * av;
-  struct CDoubleArray *carray;
+  CDOUBLEARRAY_T *carray;
   double *array;
   int i, avlen;
-  //
+  /* */
   if (items < 1 || items > 3)
     croak("Usage: new CDoubleArray(len, [AVPtr])");
   {
-    // need to check for ->new invocation, we'll have 3 args then
+    /* need to check for ->new invocation, we'll have 3 args then */
     g_classname = mysv_classname(this);
     if ( g_classname  ) {
         len = (int)SvIV(ST(1));
@@ -865,23 +1001,18 @@ PPCODE:
         len = (int)SvIV(ST(0));
         av   = (items == 2) ? av = (AV*)SvRV(ST(1)) : NULL;
     }
-    // make room
-    NEW_CARRAY(carray,CDoubleArray,len,sizeof(double));
+    /* make room */
+    NEW_CARRAY(carray,CDOUBLEARRAY_T,len,sizeof(double));
     carray->len = len;
     if (av) {
-      // initializing section:
-      // for derived classes we'll have a problem here!
-      // we could either check the classname for ints,
-      // or call seperate initializers (in perl)
-      if (!strEQ(g_classname,CDblNAME)) {
+      /* initializing section: */
+      /* for derived classes we'll have a problem here! */
+      /* we could either check the classname for ints, */
+      /* or call seperate initializers (in perl) */
+      if (!strEQ(g_classname,CDblNAME))
         warn("can only initialize %s",CDblNAME);
-      } else {
-        avlen = av_len(av);
-        array = carray->ptr;
-        for (i=0; i <= min(avlen,len-1); i++) {
-          array[i] = SvNV(AvARRAY(av)[i]);
-        }
-      }
+      else
+        myarray_init(g_classname, (CARRAY_T *)carray, av);
     }
     ST(0) = sv_newmortal();
     sv_setref_pv(ST(0), g_classname, (void*)carray);
@@ -891,7 +1022,7 @@ PPCODE:
 
 double
 double_get(carray, index)
-    struct CDoubleArray * carray
+    CDOUBLEARRAY_T * carray
     int      index
 CODE:
   if ((index < 0) || (index >= carray->len))
@@ -902,42 +1033,42 @@ OUTPUT:
 
 void
 double_set(carray, index, value)
-    struct CDoubleArray * carray
+    CDOUBLEARRAY_T * carray
     int      index
     double   value
 CODE:
   if ((index < 0) || (index >= carray->len))
     croak (ErrMsg_index);
   carray->ptr[index] = value;
-//
-//struct CDoubleArray *
-//double_nreverse (carray)
-//  struct CDoubleArray * carray
-//PREINIT:
-//  int len;
-//  double *up, *down, tmp;
-//CODE:
-//  len = carray->len;
-//  if (!len)  XSRETURN_EMPTY;
-//  if (!carray->ptr) XSRETURN_EMPTY;
-//  // reverse in place
-//  down = &carray->ptr[len-1];
-//  up   = &carray->ptr[0];
-//  while ( down > up )
-//  {
-//    tmp = *up;
-//    *up++ = *down;
-//    *down-- = tmp;
-//  }
-//  RETVAL = carray;
-//OUTPUT:
-//  RETVAL
+/* */
+/*CDOUBLEARRAY_T * */
+/*double_nreverse (carray) */
+/*  CDOUBLEARRAY_T * carray */
+/*PREINIT: */
+/*  int len; */
+/*  double *up, *down, tmp; */
+/*CODE: */
+/*  len = carray->len; */
+/*  if (!len)  XSRETURN_EMPTY; */
+/*  if (!carray->ptr) XSRETURN_EMPTY; */
+/*  // reverse in place */
+/*  down = &carray->ptr[len-1]; */
+/*  up   = &carray->ptr[0]; */
+/*  while ( down > up ) */
+/*  { */
+/*    tmp = *up; */
+/*    *up++ = *down; */
+/*    *down-- = tmp; */
+/*  } */
+/*  RETVAL = carray; */
+/*OUTPUT: */
+/*  RETVAL */
 
-struct CDoubleArray *
+CDOUBLEARRAY_T *
 double_ToDouble2 (x, y, dst=0)
-  struct CDoubleArray * x
-  struct CDoubleArray * y
-  struct CDoubleArray *dst = (items > 2) ? dst = (struct CDoubleArray *)SvRV(ST(2)) : NULL;
+  CDOUBLEARRAY_T * x
+  CDOUBLEARRAY_T * y
+  CDOUBLEARRAY_T *dst = (items > 2) ? dst = (CDOUBLEARRAY_T *)SvRV(ST(2)) : NULL;
 PREINIT:
   int i, len;
   double *xp, *yp;
@@ -945,10 +1076,10 @@ PREINIT:
 CODE:
   len = x->len;
   if (!dst) {
-    NEW_CARRAY(dst,CDoubleArray,len,sizeof(double2));
+    NEW_CARRAY(dst,CDOUBLEARRAY_T,len,sizeof(double2));
   } else {
     CHECK_DERIVED_FROM(2,CDblNAME);
-    MAYBE_GROW_CARRAY(dst,CDoubleArray,len,sizeof(double2));
+    MAYBE_GROW_CARRAY(dst,CDOUBLEARRAY_T,len,sizeof(double2));
   }
   dstp = (double2 *) dst->ptr;
   if (min(x->len,y->len) == len)
@@ -967,12 +1098,12 @@ CODE:
 OUTPUT:
   RETVAL
 
-struct CDoubleArray *
+CDOUBLEARRAY_T *
 double_ToDouble3 (x, y, z=0, dst=0)
-  struct CDoubleArray * x
-  struct CDoubleArray * y
-  struct CDoubleArray * z = (items > 2) ? z = (struct CDoubleArray *)SvRV(ST(2)) : NULL;
-  struct CDoubleArray *dst= (items > 3) ? dst = (struct CDoubleArray *)SvRV(ST(3)) : NULL;
+  CDOUBLEARRAY_T * x
+  CDOUBLEARRAY_T * y
+  CDOUBLEARRAY_T * z = (items > 2) ? z   = (CDOUBLEARRAY_T *)SvRV(ST(2)) : NULL;
+  CDOUBLEARRAY_T *dst= (items > 3) ? dst = (CDOUBLEARRAY_T *)SvRV(ST(3)) : NULL;
 PREINIT:
   int i, len;
   double3 *dstp;
@@ -980,10 +1111,10 @@ CODE:
   len = x->len;
   CHECK_DERIVED_FROM(2,CDblNAME);
   if (!dst) {
-    NEW_CARRAY(dst,CDoubleArray,len,sizeof(double3));
+    NEW_CARRAY(dst,CDOUBLEARRAY_T,len,sizeof(double3));
   } else {
     CHECK_DERIVED_FROM(3,CDblNAME);
-    MAYBE_GROW_CARRAY(dst,CDoubleArray,len,sizeof(double3));
+    MAYBE_GROW_CARRAY(dst,CDOUBLEARRAY_T,len,sizeof(double3));
   }
   dstp = (double3 *) dst->ptr;
   if (min(min(x->len,y->len),z->len) == len)
@@ -1004,12 +1135,28 @@ CODE:
 OUTPUT:
   RETVAL
 
+AV *
+double_list(carray)
+  CDOUBLEARRAY_T * carray
+PREINIT:
+    int i, len;
+    double *array;
+CODE:
+    RETVAL = newAV();
+    len = carray->len;
+    array = carray->ptr;
+    for (i=0; i<len; i++ ) {
+        av_push(RETVAL, sv_2mortal( newSVnv( array[i] )));
+    }
+OUTPUT:
+  RETVAL
+
 MODULE = CArray     PACKAGE = CDouble2Array PREFIX = double2_
 PROTOTYPES: DISABLE
 
 int
 double2_itemsize (carray)
-  struct CDoubleArray * carray
+  CDOUBLEARRAY_T * carray
 CODE:
   RETVAL = sizeof(double2);
 OUTPUT:
@@ -1017,10 +1164,11 @@ OUTPUT:
 
 void
 double2_get (carray, index)
-  struct CDoubleArray *carray
+  CDOUBLEARRAY_T *carray
   int index
 PREINIT:
   double2 *array;
+  AV *av;
 CODE:
   if ((index < 0) || (index >= carray->len/2))
     croak (ErrMsg_index);
@@ -1028,22 +1176,28 @@ CODE:
 #ifdef WANTARRAY
   if (Perl_dowantarray()) {
 #endif
+#if (WANTARRAY || ASARRAY)
     XST_mNV(0,array[index][0]);
     XST_mNV(1,array[index][1]);
     XSRETURN(2);
+#endif
 #ifdef WANTARRAY
   } else {
+#endif
+#if (WANTARRAY || !ASARRAY)
     av = newAV();
     av_push(av, sv_2mortal( newSVnv( array[index][0] )));
     av_push(av, sv_2mortal( newSVnv( array[index][1] )));
     ST(0) = sv_2mortal(newRV((SV*) av));
     XSRETURN(1);
+#endif
+#ifdef WANTARRAY
   }
 #endif
 
 void
 double2_set(carray, index, value)
-  struct CDoubleArray * carray
+  CDOUBLEARRAY_T * carray
   int index
   AV * value
 PREINIT:
@@ -1060,9 +1214,9 @@ CODE:
 
 AV *
 double2_ToPar (carray, x=0, y=0)
-  struct CDoubleArray * carray
-  struct CDoubleArray * x  = (items > 1) ? x = (struct CDoubleArray *) SvRV(ST(1)) : NULL;
-  struct CDoubleArray * y  = (items > 2) ? y = (struct CDoubleArray *) SvRV(ST(2)) : NULL;
+  CDOUBLEARRAY_T * carray
+  CDOUBLEARRAY_T * x  = (items > 1) ? x = (CDOUBLEARRAY_T *) SvRV(ST(1)) : NULL;
+  CDOUBLEARRAY_T * y  = (items > 2) ? y = (CDOUBLEARRAY_T *) SvRV(ST(2)) : NULL;
 PREINIT:
   int i, len;
   double2 *array;
@@ -1070,16 +1224,16 @@ CODE:
   len = carray->len / 2;
   array = (double2 *) carray->ptr;
   if (!x) {
-    NEW_CARRAY(x,CDoubleArray,len,sizeof(double));
+    NEW_CARRAY(x,CDOUBLEARRAY_T,len,sizeof(double));
   } else {
     CHECK_DERIVED_FROM(1,CDblNAME);
-    MAYBE_GROW_CARRAY(x,CDoubleArray,len,sizeof(double));
+    MAYBE_GROW_CARRAY(x,CDOUBLEARRAY_T,len,sizeof(double));
   }
   if (!y) {
-    NEW_CARRAY(y,CDoubleArray,len,sizeof(double));
+    NEW_CARRAY(y,CDOUBLEARRAY_T,len,sizeof(double));
   } else {
     CHECK_DERIVED_FROM(2,CDblNAME);
-    MAYBE_GROW_CARRAY(y,CDoubleArray,len,sizeof(double));
+    MAYBE_GROW_CARRAY(y,CDOUBLEARRAY_T,len,sizeof(double));
   }
   for (i=0; i < len; i++) {
     x->ptr[i] = array[i][0];
@@ -1097,7 +1251,7 @@ PROTOTYPES: DISABLE
 
 int
 double3_itemsize (carray)
-  struct CDoubleArray * carray
+  CDOUBLEARRAY_T * carray
 CODE:
   RETVAL = sizeof(double3);
 OUTPUT:
@@ -1105,10 +1259,11 @@ OUTPUT:
 
 void
 double3_get (carray, index)
-  struct CDoubleArray *carray
+  CDOUBLEARRAY_T *carray
   int index
 PREINIT:
   double3 *array;
+  AV *av;
 CODE:
   if ((index < 0) || (index >= carray->len/3))
     croak (ErrMsg_index);
@@ -1116,25 +1271,31 @@ CODE:
 #ifdef WANTARRAY
   if (Perl_dowantarray()) {
 #endif
-    EXTEND(sp,1);// one more
+#if (WANTARRAY || ASARRAY)
+    EXTEND(sp,1);
     XST_mNV(0,array[index][0]);
     XST_mNV(1,array[index][1]);
     XST_mNV(2,array[index][2]);
     XSRETURN(3);
+#endif
 #ifdef WANTARRAY
   } else {
+#endif
+#if (WANTARRAY || !ASARRAY)
     av = newAV();
     av_push(av, sv_2mortal( newSVnv( array[index][0] )));
     av_push(av, sv_2mortal( newSVnv( array[index][1] )));
     av_push(av, sv_2mortal( newSVnv( array[index][2] )));
     ST(0) = sv_2mortal(newRV((SV*) av));
     XSRETURN(1);
+#endif
+#ifdef WANTARRAY
   }
 #endif
 
 void
 double3_set(carray, index, value)
-  struct CDoubleArray * carray
+  CDOUBLEARRAY_T * carray
   int index
   AV * value
 PREINIT:
@@ -1151,10 +1312,10 @@ CODE:
 
 AV *
 double3_ToPar (carray, x=0, y=0, z=0)
-  struct CDoubleArray * carray
-  struct CDoubleArray * x  = (items > 1) ? x = (struct CDoubleArray *) SvRV(ST(1)) : NULL;
-  struct CDoubleArray * y  = (items > 2) ? y = (struct CDoubleArray *) SvRV(ST(2)) : NULL;
-  struct CDoubleArray * z  = (items > 3) ? z = (struct CDoubleArray *) SvRV(ST(3)) : NULL;
+  CDOUBLEARRAY_T * carray
+  CDOUBLEARRAY_T * x  = (items > 1) ? x = (CDOUBLEARRAY_T *) SvRV(ST(1)) : NULL;
+  CDOUBLEARRAY_T * y  = (items > 2) ? y = (CDOUBLEARRAY_T *) SvRV(ST(2)) : NULL;
+  CDOUBLEARRAY_T * z  = (items > 3) ? z = (CDOUBLEARRAY_T *) SvRV(ST(3)) : NULL;
 PREINIT:
   int i, len;
   double3 *array;
@@ -1162,22 +1323,22 @@ CODE:
   len = carray->len / 3;
   array = (double3 *) carray->ptr;
   if (!x) {
-    NEW_CARRAY(x,CDoubleArray,len,sizeof(double));
+    NEW_CARRAY(x,CDOUBLEARRAY_T,len,sizeof(double));
   } else {
     CHECK_DERIVED_FROM(1,CDblNAME);
-    MAYBE_GROW_CARRAY(x,CDoubleArray,len,sizeof(double));
+    MAYBE_GROW_CARRAY(x,CDOUBLEARRAY_T,len,sizeof(double));
   }
   if (!y) {
-    NEW_CARRAY(y,CDoubleArray,len,sizeof(double));
+    NEW_CARRAY(y,CDOUBLEARRAY_T,len,sizeof(double));
   } else {
     CHECK_DERIVED_FROM(1,CDblNAME);
-    MAYBE_GROW_CARRAY(y,CDoubleArray,len,sizeof(double));
+    MAYBE_GROW_CARRAY(y,CDOUBLEARRAY_T,len,sizeof(double));
   }
   if (!z) {
-    NEW_CARRAY(z,CDoubleArray,len,sizeof(double));
+    NEW_CARRAY(z,CDOUBLEARRAY_T,len,sizeof(double));
   } else {
     CHECK_DERIVED_FROM(1,CDblNAME);
-    MAYBE_GROW_CARRAY(z,CDoubleArray,len,sizeof(double));
+    MAYBE_GROW_CARRAY(z,CDOUBLEARRAY_T,len,sizeof(double));
   }
   for (i=0; i < len; i++) {
     x->ptr[i] = array[i][0];
@@ -1196,7 +1357,7 @@ PROTOTYPES: DISABLE
 
 int
 string_itemsize (carray, index=0)
-  struct CStringArray * carray
+  CSTRINGARRAY_T * carray
   int index
 CODE:
   if (!index)
@@ -1209,21 +1370,19 @@ CODE:
 OUTPUT:
   RETVAL
 
-# I use malloc here, PERL_MALLOC seems to be damaged with MSVC
-
 void
 string_new (...)
 PPCODE:
   int len;
   AV * av;
   char **array, *s;
-  struct CStringArray *carray;
+  CSTRINGARRAY_T *carray;
   int i, avlen;
-  //
+  /* */
   if (items < 1 || items > 3)
     croak("Usage: new CStringArray(len, [AVPtr])");
   {
-    // need to check for ->new invocation, we'll have 3 args then
+    /* need to check for ->new invocation, we'll have 3 args then */
     if ( g_classname = mysv_classname(ST(0)) ) {
         len = (int)SvIV(ST(1));
         av   = (items == 3) ? av = (AV*)SvRV(ST(2)) : NULL;
@@ -1232,24 +1391,15 @@ PPCODE:
         len = (int)SvIV(ST(0));
         av   = (items == 2) ? av = (AV*)SvRV(ST(1)) : NULL;
     }
-    NEW_CARRAY(carray,CStringArray,len,sizeof(char *));
+    NEW_CARRAY(carray,CSTRINGARRAY_T,len,sizeof(char *));
     memset (carray->ptr, 0, len + carray->freelen);
     if (av) {
-      if (!strEQ(g_classname,CStrNAME)) {
+      if (!strEQ(g_classname,CStrNAME))
         warn("can only initialize %s", CStrNAME);
-      } else {
-        avlen = av_len(av);
-        array = carray->ptr;
-        for (i=0; i <= min(avlen,len-1); i++) {
-            if ( SvPOK(AvARRAY(av)[i]) ) {
-                s = SvPVX(AvARRAY(av)[i]);
-                array[i] = safemalloc(strlen(s)+1);
-                strcpy(array[i],s);
-            }
-        }
-      }
+      else
+        myarray_init(g_classname, (CARRAY_T *)carray, av);
     }
-    EXTEND(sp,1); // one more
+    EXTEND(sp,1); /* one more */
     ST(0) = sv_newmortal();
     sv_setref_pv(ST(0), g_classname, (void*)carray);
     XSRETURN(1);
@@ -1258,7 +1408,7 @@ PPCODE:
 
 void
 string_DESTROY(carray)
-  struct CStringArray * carray
+  CSTRINGARRAY_T * carray
 PREINIT:
   char **array, *old;
   int len, i = 0;
@@ -1266,7 +1416,7 @@ CODE:
 #ifdef MYDEBUG_FREE
   DBG_PRINTF(("XSDbg: free (%p,->%p)\n",carray, carray->ptr));
 #endif
-  // old = (char *) carray;
+  /* old = (char *) carray; */
   len   = carray->len;
   array = carray->ptr;
   if (array) {
@@ -1276,7 +1426,7 @@ CODE:
       }
       safefree (array);
   }
-//  SvROK_off(ST(0));
+/*  SvROK_off(ST(0)); */
 #ifdef MYDEBUG_FREE
   DBG_PRINTF((" unref (refSV: %d, RV: %p, IVRV: %p, refRV: %d)\n",
     SvREFCNT(ST(0)), SvRV(ST(0)), SvIV(SvRV(ST(0))), SvREFCNT(SvRV(ST(0))) ));
@@ -1284,10 +1434,10 @@ CODE:
 
 void
 string_delete (carray, index)
-  struct CStringArray * carray
+  CSTRINGARRAY_T * carray
   int index
 CODE:
-  // deletes one item at index and shifts the rest
+  /* deletes one item at index and shifts the rest */
   if ((index < 0) || (index >= carray->len))
     croak (ErrMsg_index);
   carray->freelen++;
@@ -1299,19 +1449,19 @@ CODE:
 
 char *
 string_get (carray, index)
-    struct CStringArray * carray
+    CSTRINGARRAY_T * carray
     int   index
 CODE:
   if ((index < 0) || (index >= carray->len))
     croak (ErrMsg_index);
-  // hmm, this fails the first time, but after nreverse it works okay...
+  /* hmm, this fails the first time, but after nreverse it works okay... */
   RETVAL = strdup(carray->ptr[index]);
 OUTPUT:
   RETVAL
 
 void
 string_set (carray, index, value)
-    struct CStringArray * carray
+    CSTRINGARRAY_T * carray
     int index
     char *value
 PREINIT:
@@ -1319,23 +1469,23 @@ PREINIT:
 CODE:
     if ((index < 0) || (index >= carray->len))
         croak (ErrMsg_index);
-    // let the clib do that
+    /* let the clib do that */
     s = (char *) saferealloc (carray->ptr[index], strlen(value)+1);
     carray->ptr[index] = s;
     strcpy (s, value);
 
-struct CStringArray *
+CSTRINGARRAY_T *
 string_copy (carray)
-  struct CStringArray * carray
+  CSTRINGARRAY_T * carray
 PREINIT:
     SV * this = ST(0);
     int i, len;
-    struct CStringArray * ncarray;
+    CSTRINGARRAY_T * ncarray;
 CODE:
-    // return a fresh copy
-    // this can only be "CStringArray" for now but maybe we derive from it later
+    /* return a fresh copy
+       this can only be "CStringArray" for now but maybe we derive from it later */
     len = carray->len;
-    NEW_CARRAY(ncarray,CStringArray,len,sizeof(char *));
+    NEW_CARRAY(ncarray,CSTRINGARRAY_T,len,sizeof(char *));
     for (i=0; i < len; i++) {
       ncarray->ptr[i] = strdup(carray->ptr[i]);
     }
@@ -1343,9 +1493,25 @@ CODE:
 OUTPUT:
     RETVAL
 
+AV *
+string_list(carray)
+  CSTRINGARRAY_T * carray
+PREINIT:
+    int i, len;
+    char **array;
+CODE:
+    RETVAL = newAV();
+    len = carray->len;
+    array = carray->ptr;
+    for (i=0; i<len; i++ ) {
+        av_push(RETVAL, sv_2mortal( newSVpv( array[i],0 )));
+    }
+OUTPUT:
+  RETVAL
+
 BOOT:
-{   // These are the XS provided protected itemsizes.
-    // You might add more in perl per class (but not readonly).
+{   /* These are the XS provided protected itemsizes.
+       You might add more in perl per class (but not readonly). */
     mysv_ivcreate (sizeof(int),    "CIntArray::itemsize",    SVf_READONLY);
     mysv_ivcreate (sizeof(int2),   "CInt2Array::itemsize",   SVf_READONLY);
     mysv_ivcreate (sizeof(int3),   "CInt3Array::itemsize",   SVf_READONLY);
@@ -1354,5 +1520,5 @@ BOOT:
     mysv_ivcreate (sizeof(double2),"CDouble2Array::itemsize",SVf_READONLY);
     mysv_ivcreate (sizeof(double3),"CDouble3Array::itemsize",SVf_READONLY);
     mysv_ivcreate (sizeof(char *), "CStringArray::itemsize", SVf_READONLY);
-    // we could also get the stashes now, but...
+    /* we could also get the stashes now, but... */
 }

@@ -12,10 +12,10 @@ WriteMakefile(
     # additional targets
     'depend' => {
       # update the pod2text readme from the embedded pod
-      'pod'  => "\$(DISTVNAME).readme\n",
-      'dist' => "\$(DISTDEFAULT) \$(DISTVNAME).readme\n",
-      '$(DISTVNAME).readme' => "\$(VERSION_FROM)\n" . 
-      	"\tpod2text \$(VERSION_FROM) >\$(DISTVNAME).readme\n",
+      'pod'  => "\$(DISTVNAME).txt\n",
+#      'dist' => "\$(DISTDEFAULT) \$(DISTVNAME).readme\n",
+#      '$(DISTVNAME).readme' => "\$(VERSION_FROM)\n" . 
+#      	"\tpod2text \$(VERSION_FROM) >\$(DISTVNAME).readme\n",
       # preprocessor only (MSVC => .i file)
       'preonly' => '$(BASEEXT).i' . "\n\t" .
 	'$(CC) -P -I$(PERL_INC) $(C_FILES)'."\n",

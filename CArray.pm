@@ -10,7 +10,7 @@ use Carp;
 use vars qw($VERSION @ISA);
 require DynaLoader;
 #use Autoloader;    # while testing remove this
-$VERSION = '0.10';
+$VERSION = '0.11';
 @ISA = qw(DynaLoader);
 
 =head1 NAME
@@ -125,6 +125,17 @@ sub new {
 
 =pod
 
+=item init ( values )
+
+A seperate init method for bulk definitions. (fill)
+
+This is the same as the second new argument.
+If the provided values arrayref is shorter that the allocated size,
+the rest will stay uninitialized.
+
+  $I = CIntArray::new(100) ;
+  $I->init( [0..99] );
+
 =item len ()
 
 The len method returns the length of the array, 1+ the index of the
@@ -164,6 +175,10 @@ Returns nothing.
     $I2 = CInt2Array->new(2);
     $I2->set(0, [1,0]);
     $I2->set(1, [0,1]);
+
+=item list ()
+
+Returns the content of the flat array representation as arrayref.
 
 =item grow ( n )
 
@@ -594,6 +609,6 @@ This is alpha, not fully tested yet!
 
 =head1 Last Changed
 
-1999/12/5
+1999/12/05
 
 =cut

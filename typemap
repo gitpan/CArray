@@ -9,20 +9,20 @@ double2 * T_CPTR
 double3 * T_CPTR
 char **   T_CSTRINGPTR
 AV *	  T_AVREF
-struct CArray * 	T_CARRAY
-struct CIntArray * 	T_CARRAY
-struct CDoubleArray * 	T_CARRAY
-struct CStringArray * 	T_CARRAY
+CARRAY_T * 	T_CARRAY
+CINTARRAY_T * 	T_CARRAY
+CDOUBLEARRAY_T * 	T_CARRAY
+CSTRINGARRAY_T * 	T_CARRAY
 
 #############################################################################
 INPUT
 T_CARRAY
 	g_classname = mysv_classname($arg);
-        if (sv_derived_from($arg, \"${(my $ntt=$ntype)=~s/struct (.)(.*)Ptr/uc($1).$2/e;\$ntt}\")) {
+        if (sv_derived_from($arg, \"${my $ntt=$ntype; $ntype eq 'CARRAY_TPtr' ? $ntt='CArray' : $ntt=~s/C(.)(.*)ARRAY_TPtr/C.$1.lc($2).'Array'/e;\$ntt}\")) {
                 IV tmp = SvIV((SV*)SvRV($arg));
 		$var = ($type) tmp;
 	} else {
-                croak(\"$var is not of type ${(my $ntt=$ntype)=~s/struct (.)(.*)Ptr/uc($1).$2/e;\$ntt}\");
+                croak(\"$var is not of type ${(my $ntt=$ntype)=~s/C(.?)(.*)ARRAY_TPtr/C.$1.lc($2).'Array'/e;\$ntt}\");
 	}
 T_CPTR
         if (sv_derived_from($arg, \"${(my $ntt=$ntype)=~s/(.)(.*)Ptr/'C'.uc($1).$2.'Array'/e;\$ntt}\")) {
