@@ -1,0 +1,14 @@
+CArray-0.10.readme
+CArray.pm
+CArray.xs
+Changes
+INSTALL
+MANIFEST
+Makefile.PL
+t/00intarr.t
+t/01dblarr.t
+t/02strarr.t
+t/03intcvt.t
+t/treorder.pl
+t.bat
+typemap

@@ -1,0 +1,310 @@
+NAME
+    CArray - External C Arrays for Perl (Alpha)
+
+SYNOPSIS
+        use CArray;
+        $dblarr = new CDoubleArray(1000);
+
+        @values = (0..1000);
+        $dblarr = new CIntArray(1000,\@values);
+        ref $dblarr eq 'CIntArray' and
+          $dblarr->set(0,1) and
+          $dblarr->get(0) == 1;
+
+        tie (@array, 'CDoubleArray', 1000, \@values);
+        print $array[0], join ', ', @dbl[1..20];
+
+DESCRIPTION
+    Several XS classes and methods to deal with unstructured
+    continuous C arrays are provided, for the three basic C-types
+    array of *INT*, *DOUBLE* and *STRING* and some aggregate types
+    int[2][], int[3][], int[4][], double[2][], double[3][] as range
+    checked, tieable arrays.
+
+    This roughly reflects to:
+
+        CArray
+            CIntArray               int[]
+                CInt2Array          int[][2]
+                CInt3Array          int[][3]
+                CInt4Array          int[][4]
+            CDoubleArray            double[]
+                CDouble2Array       double[][2]
+                CDouble3Array       double[][3]
+            CStringArray            *char[]
+
+    External C arrays limit communication overhead with large simple
+    data structures, where size or time constraints become serious,
+    optionally manipulated by external XS modules. Such as various
+    computional geometry modules dealing with 10.000 - 200.000
+    double[3]. Modification is done in-place and preferably in bulk.
+
+    It might also be easier to write XSUBs by converting the data to
+    CArray's before, pass this pointer to the C func, and handle the
+    results in Perl then.
+
+    The Fetch/Store operations with tied arrays copy the scalars to
+    perl and back, so it shouldn't be abused for BIG data.
+
+    Perl's safemalloc/safefree is used.
+
+CLASS METHODS
+    new ( SIZE, [ ARRAYREF ] )
+        The new method is provided for all classes, the optional
+        arrayref arg applies only to the base `Array' classes, not
+        the aggregate.
+
+        The constructor creates a new `CArray' object. For the
+        `Array' classes the second optional argument is used to
+        initialize it with an array. If the provided arrayref is
+        shorter that the allocated size, the rest will stay
+        uninitialized.
+
+            $D = new CDoubleArray(1000,[0..999]);
+
+    len ()
+        The len method returns the length of the array, 1+ the index
+        of the last element. To enlarge the array grow() should be
+        used.
+
+            $D  = new CDoubleArray(5000);
+            for my $j (0 .. $D->len-1) { $D->set($_, 0.0)); }
+            $D->len; # => 5000
+
+    get ( index )
+        get returns the value at the given index, which will be
+        scalar or a list. Croaks with "index out of range" on wrong
+        index.
+
+            $I = new CIntArray(2,[0,1]);
+            print $I->get(1); # => 1
+            print $I->get(2);
+              => croak "index out of range"
+
+            $I2 = new CInt2Array(2,[[0,1]]);
+            print $I->get(0); # => (0 1)
+
+    set ( index, value )
+        The set method is provided for all classes. It changes the
+        value at the given index. The value should be either a
+        scalar or an arrayref. Croaks with "index out of range" on
+        wrong index. Returns nothing.
+
+            $I = new CIntArray(100);
+            map { $I->set($_,$i[$_]) } (0..99);
+            $I->set(99,-1);
+            $I->set(100);
+              => "index out of range"
+
+            $I2 = CInt2Array->new(2);
+            $I2->set(0, [1,0]);
+            $I2->set(1, [0,1]);
+
+    grow ( n )
+        Adds room for n elements to the array. These elements must
+        be initialized extra with set. To support faster grow() a
+        certain number of already pre-allocated items at the end of
+        the array will be used. (see free) Returns nothing.
+
+    delete ( index )
+        Deletes the item at the given index. free is incremented and
+        the remaining array items are shifted. Returns nothing.
+
+    get_grouped_by ( size, index )
+        Returns a list of subsequent values. It returns a list of
+        size indices starting at size * index. This is useful to
+        abuse the unstructured array as typed array of the same
+        type, such as *double[3] or *int[2].
+
+        But this is normally not used since fast get methods are
+        provided for the sequential classes, and those methods can
+        be used on flat arrays as well. (Internally all sequential
+        arrays are flat).
+
+          CInt3Array::get($I,0) == $I->get_grouped_by(3,0)
+
+        $ptr->get_grouped_by(2,4) returns the 4-th pair if the array
+        is seen as list of pairs.
+
+          $ptr->get_grouped_by(3,$i) => (ptr[i*3] ptr[i*3+1] ptr[i*3+2] )
+
+    slice ( start, size, [ stride=1 ] )
+        C++ like slice operator on a flat array. - In contrast to
+        get_grouped_by() which semantics are as on a grouped array.
+
+        Returns a list of size items, starting at start, with
+        interim offsets of stride which defaults to 1. This is
+        useful to return columns or rows of a flat matrix.
+
+          $I = new CIntArray (9, [0..8]);
+          $I->slice ( 0, 3, 3 ); # 1st column
+            => (0 3 6)
+          $I->slice ( 0, 3, 1 ); # 1st row
+            => (0 1 2)
+          $I->get_grouped_by(3, 0);
+            => (0 1 2)
+
+    isort ()
+        "Indirect sort", numerically ascending only. Returns a fresh
+        sorted index list of integers (0 .. len-1)
+
+    nreverse ()
+        "Reverse in place". (The name comes from lisp, where n
+        denotes the destructive version). Destructively swaps all
+        array items. Returns nothing.
+
+SEQUENTIAL CLASSES and CONVERSION
+        To mix and change parallel and sequential data structures,
+        the aggregate (ie sequential) types are derived from their
+        base classes with fast get and set methods to return and
+        accept lists instead of scalars.
+
+        The Arrays for Int2, Int3, Int4, Double2 and Double3 can
+        also be converted from and to their base objects with fast
+        XS methods.
+
+          # three parallel CIntArray's
+          $X = new CIntArray(1000);
+          $Y = new CIntArray(1000);
+          $Z = new CIntArray(1000);
+
+          # copy to one sequential *int[3], new memory
+          $I = $X->ToInt3($Y,$Z);
+
+          # or to an existing array
+          $I = new CIntArray(3000);
+          $I = $X->ToInt3($Y,$Z,$I);
+
+          # copies back with allocating new memory
+          ($X, $Y, $Z) = $I->ToPar();
+
+          # copies back with reusing some existing memory (not checked!)
+          ($X, $Y, $Z) = $I->ToPar($X,$Z);  # Note: I3 will be fresh.
+
+    ToPar ( SeqArray, [ CArray,... ] )
+        This returns a list of CArray objects, copied from the
+        sequential object to plain parallel CArray objects. This is
+        a fast slice.
+
+          *int[2] => (*int, *int)
+
+          CInt2Array::ToPar
+          CInt3Array::ToPar
+          CInt4Array::ToPar
+          CDouble2Array::ToPar
+          CDouble3Array::ToPar
+
+        If the optional CArray args are given the memory for the
+        returned objects are not new allocated, the space from the
+        given objects is used instead.
+
+    To$Type$Num ( CArray, ..., [ CArray ] )
+        This returns a sequential CArray object copied from the
+        parallel objects given as arguments to one sequential
+        CArray. This is a fast map.
+
+          *int, *int => *int[2]
+
+          CIntArray::ToInt2
+          CIntArray::ToInt3
+          CIntArray::ToInt4
+          CDoubleArray::ToDouble2
+          CDoubleArray::ToDouble3
+
+        If the last optional CArray arg is defined the memory for
+        the returned object is not new allocated, the space from the
+        given object is used instead.
+
+INTERNAL METHODS
+    DESTROY ()
+        This used to crash on certain DEBUGGING perl's, but seems to
+        be okay now. Returns nothing.
+
+    CArray::itemsize ( )
+    CStringArray::itemsize ( [index] )
+        Returns the size in bytes per item stored in the array. This
+        is only used internally to optimize memory allocation and
+        the free list.
+
+        A CStringArray object accepts the optional index argument,
+        which returns the string length at the given index. Without
+        argument it returns the size in bytes of a char * pointer
+        (which is 4 on 32 bit systems).
+
+    copy ()
+        Returns a freshly allocated copy of the array with the same
+        contents.
+
+    free ()
+        Internal only. Returns the number of free elements at the
+        end of the array. If grow() needs less or equal than free
+        elements to be added, no new room will be allocated.
+
+        This is primarly for performance measures.
+
+TIEARRAY METHODS
+    Not tested yet!
+
+    tie (var, type, size)
+        After tying a array variable to an `CArray' class the
+        variable can be used just as any normal perl array.
+
+          tie (@array, 'CDoubleArray', 200);
+          print $array[200];
+            => croak "index out of range"
+
+SEE ALSO
+    http://xarch.tu-graz.ac.at/home/rurban/software/perl or
+    ftp://xarch.tu-graz.ac.at/pub/autocad/urban/perl
+
+    the perlxs(1) manpage, the "tie" entry in the perlfunc manpage,
+    Tie::Array, Geometry::Points, C::Dynalib::Poke
+
+AUTHOR
+    Reini Urban <rurban@x-ray.at>
+
+COPYRIGHT
+    Copyright (c) 1999 Reini Urban.
+
+    This module is free software; you can redistribute it and/or
+    modify it under the same terms as Perl itself.
+
+WARNING
+    These classes may be easily abused and may lead to system
+    crashes or worse.
+
+    Old: CPtr objects do no range checking at all, so may
+    unintentionally access or overwrite foreign memory. This might
+    only crash the system in the best case.
+
+    Bad malloc'd perls or systems might also lead to destruction.
+
+    The author makes NO WARRANTY, implied or otherwise, about the
+    suitability of this software for safety or security purposes.
+
+    The author shall not in any case be liable for special,
+    incidental, consequential, indirect or other similar damages
+    arising from the use of this software.
+
+    Your mileage will vary. If in any doubt DO NOT USE IT. You've
+    been warned.
+
+BUGS
+    There are certainly some. Not fully tested yet. Tests for copy,
+    grow, delete, tie are pending. Also some more conversion tests,
+    esp. with double and degenerate (grow, cut) cases.
+
+    1   realloc() in string_set() with DEBUGGING perl fails sometimes.
+
+    2   An implicit DESTROY invocation sometimes asserts a DEBUGGING
+        perl, regardless if PERL_MALLOC or the WinNT msvcrt.dll
+        malloc is used. (5.00502 - 5.00558) Esp. on perl shutdown,
+        when freeing the extra objects at the second GC.
+
+        This became much better in 0.08 than in previous versions.
+
+    This is alpha, not fully tested yet!
+
+Last Changed
+    1999/12/5
+
